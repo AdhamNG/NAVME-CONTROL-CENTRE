@@ -2,9 +2,9 @@
 # This file tells Render how to build and route your static site.
 
 services:
-  - type: static
+  - type: web
     name: navme-viewer
-    env: static
+    runtime: static
     buildCommand: npm install && npm run build
     staticPublishPath: ./dist
     # The following routing rules handle the proxying for API and S3 downloads,
