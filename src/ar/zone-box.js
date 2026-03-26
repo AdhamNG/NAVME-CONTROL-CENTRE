@@ -7,7 +7,7 @@
 import * as THREE from 'three';
 import { getScene } from './scene.js';
 
-const VISUAL_HEIGHT = 0.75;
+const VISUAL_HEIGHT = 0.2;
 const BOX_COLOR = 0x00f0ff;
 const BOX_OPACITY = 0.12;
 const EDGE_COLOR = 0x00f0ff;
@@ -73,7 +73,7 @@ export function addZoneBox(zone) {
     depthWrite: false,
   });
   const mesh = new THREE.Mesh(geo, mat);
-  mesh.position.set(zone.x + w / 2, zone.y + VISUAL_HEIGHT / 2, zone.z + h / 2);
+  mesh.position.set(zone.x, zone.y, zone.z);
   if (zone.rotation) mesh.rotation.y = Number(zone.rotation);
 
   const edges = new THREE.EdgesGeometry(geo);
@@ -109,7 +109,7 @@ export function updateZoneBox(id, { x, y, z, w, h, rotation, label }) {
 
   entry.mesh.geometry.dispose();
   entry.mesh.geometry = new THREE.BoxGeometry(bw, VISUAL_HEIGHT, bh);
-  entry.mesh.position.set(bx + bw / 2, by + VISUAL_HEIGHT / 2, bz + bh / 2);
+  entry.mesh.position.set(bx, by, bz);
   if (rotation !== undefined) entry.mesh.rotation.y = Number(rotation);
 
   entry.wireframe.geometry.dispose();

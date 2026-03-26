@@ -228,9 +228,9 @@ export function createZonePanel(container) {
 
     if (w < 0.3 && h < 0.3) { exitDrawMode(); return; }
 
-    newX.value = x.toFixed(2);
+    newX.value = (x + w / 2).toFixed(2);
     newY.value = drawStart.y.toFixed(2);
-    newZ.value = z.toFixed(2);
+    newZ.value = (z + h / 2).toFixed(2);
     newW.value = w.toFixed(2);
     newH.value = h.toFixed(2);
 
@@ -345,17 +345,13 @@ export function createZonePanel(container) {
     const rot = transform.rotation;
     const scale = transform.scale;
 
-    // Update UI fields (convert center back to corner)
+    // Direct center sync (matching Mattercraft)
+    inputX.value = pos.x.toFixed(2);
+    inputY.value = pos.y.toFixed(2);
+    inputZ.value = pos.z.toFixed(2);
+    
     const w = selectedZone.w * scale.x;
     const h = selectedZone.h * scale.z;
-    
-    // VISUAL_HEIGHT is now 0.75 in zone-box.js
-    const vh = 0.75 * scale.y;
-
-    inputX.value = (pos.x - w / 2).toFixed(2);
-    inputY.value = (pos.y - vh / 2).toFixed(2);
-    inputZ.value = (pos.z - h / 2).toFixed(2);
-    
     inputW.value = w.toFixed(2);
     inputH.value = h.toFixed(2);
     
