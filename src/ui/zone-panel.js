@@ -345,14 +345,17 @@ export function createZonePanel(container) {
     const rot = transform.rotation;
     const scale = transform.scale;
 
-    // Update UI fields
-    inputX.value = pos.x.toFixed(2);
-    inputY.value = pos.y.toFixed(2);
-    inputZ.value = pos.z.toFixed(2);
-    
-    // For zones, we map scale to w/h
+    // Update UI fields (convert center back to corner)
     const w = selectedZone.w * scale.x;
     const h = selectedZone.h * scale.z;
+    
+    // VISUAL_HEIGHT is now 0.75 in zone-box.js
+    const vh = 0.75 * scale.y;
+
+    inputX.value = (pos.x - w / 2).toFixed(2);
+    inputY.value = (pos.y - vh / 2).toFixed(2);
+    inputZ.value = (pos.z - h / 2).toFixed(2);
+    
     inputW.value = w.toFixed(2);
     inputH.value = h.toFixed(2);
     

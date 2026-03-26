@@ -7,7 +7,7 @@
 import * as THREE from 'three';
 import { getScene } from './scene.js';
 
-const VISUAL_HEIGHT = 3;
+const VISUAL_HEIGHT = 0.75;
 const BOX_COLOR = 0x00f0ff;
 const BOX_OPACITY = 0.12;
 const EDGE_COLOR = 0x00f0ff;
