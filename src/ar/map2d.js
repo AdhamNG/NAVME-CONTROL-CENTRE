@@ -50,8 +50,12 @@ export function analyzeFloors(meshRoot) {
 
   if (yValues.length === 0) return [{ label: 'Floor 1', yMin: -100, yMax: 100, yCenter: 0 }];
 
-  const yMin = Math.min(...yValues);
-  const yMax = Math.max(...yValues);
+  // Use loop instead of Math.min(...arr) to avoid stack overflow with millions of vertices
+  let yMin = Infinity, yMax = -Infinity;
+  for (let i = 0; i < yValues.length; i++) {
+    if (yValues[i] < yMin) yMin = yValues[i];
+    if (yValues[i] > yMax) yMax = yValues[i];
+  }
   const totalRange = yMax - yMin;
 
   console.log(`[map2d] Y range: ${yMin.toFixed(2)} → ${yMax.toFixed(2)} (${totalRange.toFixed(2)}m), ${yValues.length} vertices`);
