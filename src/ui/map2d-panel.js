@@ -16,6 +16,7 @@ import { setManualFloors, showFloor, resetView, getZoomLevel } from '../ar/map2d
 let floorEntries = []; // { id, name, marker, yPos, confirmed }
 let nextId = 1;
 let activeEntryId = null;
+let _switchTo3D = null;
 
 export function create2DMapPanel(container) {
   const panel = document.createElement('div');
@@ -79,6 +80,9 @@ export function create2DMapPanel(container) {
     floorEntries.push(entry);
     renderFloorList();
 
+    // Switch to 3D so user can drag the marker
+    if (_switchTo3D) _switchTo3D();
+
     // Attach gizmo to this marker
     selectEntry(id);
   }
@@ -87,6 +91,9 @@ export function create2DMapPanel(container) {
     activeEntryId = id;
     const entry = floorEntries.find(e => e.id === id);
     if (!entry) return;
+
+    // Switch to 3D so user can see and drag the marker
+    if (_switchTo3D) _switchTo3D();
 
     // Attach Y-only gizmo
     attachFloorGizmo(entry.marker);
@@ -246,5 +253,6 @@ export function create2DMapPanel(container) {
     getConfirmedFloors() {
       return floorEntries.filter(e => e.confirmed);
     },
+    setSwitchTo3D(cb) { _switchTo3D = cb; },
   };
 }

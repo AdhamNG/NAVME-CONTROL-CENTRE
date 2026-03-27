@@ -42,6 +42,9 @@ createAdminPanels(
 
 let is2DInitialized = false;
 
+// Give the 2D panel a way to switch back to 3D view for floor positioning
+map2dPanel.setSwitchTo3D(() => dashboard.switchView('3d'));
+
 // When switching to 2D tab, init the renderer and load the mesh
 dashboard.onViewSwitch((view) => {
   if (view === '2d') {
