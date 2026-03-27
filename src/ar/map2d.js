@@ -25,9 +25,9 @@ const clipTop = new THREE.Plane(new THREE.Vector3(0, -1, 0), 0);   // cuts above
 const clipBottom = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);  // cuts below
 
 /**
- * Analyze mesh geometry to detect floors using histogram-based peak detection.
- * Instead of looking for gaps (which fails when walls bridge floors),
- * we find Y-axis peaks where vertices concentrate (floor/ceiling surfaces).
+ * Analyze mesh geometry to detect floors using valley-based splitting.
+ * Builds a Y histogram, smooths it, finds deep valleys (low-density Y regions)
+ * to identify floor separation boundaries.
  * @param {THREE.Object3D} meshRoot
  * @returns {{ label:string, yMin:number, yMax:number, yCenter:number }[]}
  */
@@ -50,7 +50,6 @@ export function analyzeFloors(meshRoot) {
 
   if (yValues.length === 0) return [{ label: 'Floor 1', yMin: -100, yMax: 100, yCenter: 0 }];
 
-  // Use loop instead of Math.min(...arr) to avoid stack overflow with millions of vertices
   let yMin = Infinity, yMax = -Infinity;
   for (let i = 0; i < yValues.length; i++) {
     if (yValues[i] < yMin) yMin = yValues[i];
@@ -60,13 +59,13 @@ export function analyzeFloors(meshRoot) {
 
   console.log(`[map2d] Y range: ${yMin.toFixed(2)} → ${yMax.toFixed(2)} (${totalRange.toFixed(2)}m), ${yValues.length} vertices`);
 
-  // If the mesh is very flat (less than ~2m tall), it's just 1 floor
+  // Single floor if the mesh is shorter than a typical room
   if (totalRange < 2.0) {
     return [{ label: 'Floor 1', yMin: yMin - 0.5, yMax: yMax + 0.5, yCenter: (yMin + yMax) / 2 }];
   }
 
-  // Build histogram with bin size relative to the total height
-  const binSize = Math.max(0.15, totalRange / 200); // ~200 bins
+  // ── Build coarse histogram ──
+  const binSize = 0.3; // 30cm bins — coarse enough to smooth wall noise
   const numBins = Math.ceil(totalRange / binSize);
   const histogram = new Array(numBins).fill(0);
 
@@ -75,9 +74,9 @@ export function analyzeFloors(meshRoot) {
     histogram[bin]++;
   }
 
-  // Smooth the histogram to reduce noise (moving average, window=5)
+  // ── Heavy smoothing (window = 7 bins = ~2m) to merge wall noise ──
   const smoothed = new Array(numBins).fill(0);
-  const halfWin = 2;
+  const halfWin = 3;
   for (let i = 0; i < numBins; i++) {
     let sum = 0, count = 0;
     for (let j = Math.max(0, i - halfWin); j <= Math.min(numBins - 1, i + halfWin); j++) {
@@ -87,63 +86,80 @@ export function analyzeFloors(meshRoot) {
     smoothed[i] = sum / count;
   }
 
-  // Find the average density
-  const avgDensity = yValues.length / numBins;
+  // ── Find the median density (robust baseline) ──
+  const sortedDensity = [...smoothed].sort((a, b) => a - b);
+  const medianDensity = sortedDensity[Math.floor(sortedDensity.length / 2)];
 
-  // Find peaks: bins significantly above average (floor surfaces have dense geometry)
-  const peakThreshold = avgDensity * 2.0;
-  const peaks = [];
-  for (let i = 0; i < numBins; i++) {
-    if (smoothed[i] > peakThreshold) {
-      peaks.push({ bin: i, y: yMin + (i + 0.5) * binSize, density: smoothed[i] });
+  // ── Find valleys: local minima that dip well below median ──
+  // A valley must be below 40% of median, and must NOT be at the very edges
+  const valleyThreshold = medianDensity * 0.4;
+  const edgeMargin = Math.max(3, Math.floor(numBins * 0.05)); // ignore first/last 5%
+  const candidates = [];
+
+  for (let i = edgeMargin; i < numBins - edgeMargin; i++) {
+    if (smoothed[i] < valleyThreshold) {
+      // Check it's a local minimum in a ±3 bin window
+      let isMin = true;
+      for (let j = Math.max(0, i - 3); j <= Math.min(numBins - 1, i + 3); j++) {
+        if (smoothed[j] < smoothed[i]) { isMin = false; break; }
+      }
+      if (isMin) {
+        candidates.push({
+          bin: i,
+          y: yMin + (i + 0.5) * binSize,
+          density: smoothed[i],
+          // Score: how deep is this valley relative to its neighbors?
+          depth: medianDensity - smoothed[i],
+        });
+      }
     }
   }
 
-  if (peaks.length === 0) {
+  // ── Sort candidates by depth (deepest valleys = most likely floor boundaries) ──
+  candidates.sort((a, b) => b.depth - a.depth);
+
+  // ── Remove valleys too close to each other (keep the deepest) ──
+  const minFloorHeight = 1.5; // minimum 1.5m between floor splits
+  const splits = [];
+  for (const c of candidates) {
+    const tooClose = splits.some(s => Math.abs(s.y - c.y) < minFloorHeight);
+    if (!tooClose) {
+      splits.push(c);
+    }
+  }
+
+  // Sort splits by Y position
+  splits.sort((a, b) => a.y - b.y);
+
+  console.log(`[map2d] Found ${splits.length} valley split(s):`, splits.map(s => `Y=${s.y.toFixed(2)} (depth=${s.depth.toFixed(0)})`));
+
+  // ── Build floor ranges from splits ──
+  if (splits.length === 0) {
+    // No valleys found → single floor
     return [{ label: 'Floor 1', yMin: yMin - 0.5, yMax: yMax + 0.5, yCenter: (yMin + yMax) / 2 }];
   }
 
-  // Merge adjacent peak bins into floor ranges
-  // A floor is defined by a contiguous run of high-density bins
-  const floorRanges = [];
-  let rangeStart = peaks[0].y;
-  let rangeEnd = peaks[0].y;
-
-  for (let i = 1; i < peaks.length; i++) {
-    const gap = peaks[i].y - peaks[i - 1].y;
-    // If two peaks are close together (< typical floor height ~2.5m), they're the same floor
-    if (gap < 2.5) {
-      rangeEnd = peaks[i].y;
-    } else {
-      floorRanges.push({ yCenter: (rangeStart + rangeEnd) / 2, yMin: rangeStart, yMax: rangeEnd });
-      rangeStart = peaks[i].y;
-      rangeEnd = peaks[i].y;
-    }
-  }
-  floorRanges.push({ yCenter: (rangeStart + rangeEnd) / 2, yMin: rangeStart, yMax: rangeEnd });
-
-  // Expand each floor range to fill the space between floors
   const result = [];
-  for (let i = 0; i < floorRanges.length; i++) {
-    const floor = floorRanges[i];
-    // Lower boundary: halfway to previous floor, or mesh bottom
-    const lowerBound = i > 0
-      ? (floorRanges[i - 1].yMax + floor.yMin) / 2
-      : yMin - 0.5;
-    // Upper boundary: halfway to next floor, or mesh top
-    const upperBound = i < floorRanges.length - 1
-      ? (floor.yMax + floorRanges[i + 1].yMin) / 2
-      : yMax + 0.5;
-
+  let prevY = yMin - 0.5;
+  for (let i = 0; i < splits.length; i++) {
+    const splitY = splits[i].y;
     result.push({
       label: `Floor ${i + 1}`,
-      yMin: lowerBound,
-      yMax: upperBound,
-      yCenter: floor.yCenter,
+      yMin: prevY,
+      yMax: splitY,
+      yCenter: (prevY + splitY) / 2,
     });
+    prevY = splitY;
   }
+  // Final floor (above last split)
+  result.push({
+    label: `Floor ${splits.length + 1}`,
+    yMin: prevY,
+    yMax: yMax + 0.5,
+    yCenter: (prevY + yMax + 0.5) / 2,
+  });
 
-  console.log(`[map2d] Detected ${result.length} floor(s):`, result);
+  console.log(`[map2d] Detected ${result.length} floor(s):`, result.map(f => `${f.label}: Y ${f.yMin.toFixed(2)} → ${f.yMax.toFixed(2)}`));
   return result;
 }
 
