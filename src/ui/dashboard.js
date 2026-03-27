@@ -48,7 +48,14 @@ export function createDashboard(container) {
 
     <nav class="sidebar" id="sidebar"></nav>
 
-    <main class="viewport" id="viewport"></main>
+    <main class="viewport" id="viewport">
+      <div class="viewport-tabs" id="viewport-tabs">
+        <button class="viewport-tab active" data-view="3d" id="tab-3d">3D View</button>
+        <button class="viewport-tab" data-view="2d" id="tab-2d">2D Floor Plan</button>
+      </div>
+      <div class="viewport-3d active" id="viewport-3d"></div>
+      <div class="viewport-2d" id="viewport-2d"></div>
+    </main>
 
     <aside class="right-panel" id="right-panel">
       <div class="panel-slot active" data-panel="3d-view"    id="slot-nav"></div>
@@ -101,6 +108,32 @@ export function createDashboard(container) {
   });
 
   const viewport = el.querySelector('#viewport');
+  const viewport3d = el.querySelector('#viewport-3d');
+  const viewport2d = el.querySelector('#viewport-2d');
+  const tab3d = el.querySelector('#tab-3d');
+  const tab2d = el.querySelector('#tab-2d');
+  let activeView = '3d';
+  let onViewSwitch = null;
+
+  tab3d.addEventListener('click', () => switchView('3d'));
+  tab2d.addEventListener('click', () => switchView('2d'));
+
+  function switchView(view) {
+    activeView = view;
+    tab3d.classList.toggle('active', view === '3d');
+    tab2d.classList.toggle('active', view === '2d');
+    viewport3d.classList.toggle('active', view === '3d');
+    viewport2d.classList.toggle('active', view === '2d');
+
+    // Switch which right-panel slot is visible
+    if (view === '2d') {
+      setActivePanel('2d-map', el);
+    } else {
+      setActivePanel('3d-view', el);
+    }
+
+    if (onViewSwitch) onViewSwitch(view);
+  }
 
   const slots = {
     nav:        el.querySelector('#slot-nav'),
@@ -116,7 +149,8 @@ export function createDashboard(container) {
 
   return {
     element: el,
-    viewport,
+    viewport: viewport3d,
+    viewport2d,
     slots,
     show() {
       el.classList.remove('hidden');
@@ -129,6 +163,8 @@ export function createDashboard(container) {
       if (clockTimer) clearInterval(clockTimer);
     },
     refreshStats() { refreshBottomStats(el); },
+    onViewSwitch(cb) { onViewSwitch = cb; },
+    switchView,
   };
 }
 

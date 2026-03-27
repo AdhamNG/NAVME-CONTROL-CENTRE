@@ -7,7 +7,8 @@ import { renderForm } from './ui/form.js';
 import { createStatusBar, createConfidenceBadge } from './ui/status.js';
 import { getM2MToken } from './services/multiset-auth.js';
 import { downloadMapMesh } from './services/multiset-mesh.js';
-import { initScene, addMesh, flyTo } from './ar/scene.js';
+import { initScene, addMesh, flyTo, getScene } from './ar/scene.js';
+import { init2DView, loadMeshFor2D, requestRender as render2D } from './ar/map2d.js';
 import { createDashboard } from './ui/dashboard.js';
 import { createNavPanel } from './ui/nav.js';
 import { createPOIPanel } from './ui/poi-panel.js';
@@ -39,6 +40,34 @@ createAdminPanels(
   () => dashboard.refreshStats()
 );
 
+// Track if 2D view has been initialized
+let is2DInitialized = false;
+
+// Listen for 3D/2D tab switches
+dashboard.onViewSwitch((view) => {
+  if (view === '2d') {
+    if (!is2DInitialized) {
+      init2DView(dashboard.viewport2d);
+      is2DInitialized = true;
+
+      // Load mesh into 2D if 3D scene has a mesh loaded
+      const scene3D = getScene();
+      if (scene3D) {
+        const anchor = scene3D.getObjectByName('MultiSetAnchor');
+        if (anchor) {
+          const detectedFloors = loadMeshFor2D(anchor);
+          map2dPanel.setFloors(detectedFloors);
+          map2dPanel.bindZoomListener(dashboard.viewport2d);
+        }
+      }
+    }
+    render2D();
+    map2dPanel.show();
+  } else {
+    map2dPanel.hide();
+  }
+});
+
 async function onFormSubmit(creds) {
   formUI.disable();
   statusBar.show('Authenticating…', 'loading');
@@ -62,7 +91,6 @@ async function onFormSubmit(creds) {
       poiPanel.show();
       userPanel.show();
       zonePanel.show();
-      map2dPanel.show();
       setTimeout(() => statusBar.hide(), 3000);
       return;
     }
@@ -79,7 +107,6 @@ async function onFormSubmit(creds) {
     poiPanel.show();
     userPanel.show();
     zonePanel.show();
-    map2dPanel.show();
 
     setTimeout(() => statusBar.hide(), 3000);
   } catch (err) {
