@@ -7,6 +7,7 @@ import { fetchCounts } from '../services/supabase.js';
 
 const SIDEBAR_ITEMS = [
   { id: '3d-view',   icon: svgCube,     label: 'Map' },
+  { id: '2d-map',    icon: svgMap2D,    label: '2D Map' },
   { id: 'pois',      icon: svgPin,      label: 'POIs' },
   { id: 'tracking',  icon: svgRadar,    label: 'Track' },
   { id: 'zones',     icon: svgBox,      label: 'Zones' },
@@ -51,6 +52,7 @@ export function createDashboard(container) {
 
     <aside class="right-panel" id="right-panel">
       <div class="panel-slot active" data-panel="3d-view"    id="slot-nav"></div>
+      <div class="panel-slot"        data-panel="2d-map"     id="slot-2dmap"></div>
       <div class="panel-slot"        data-panel="pois"       id="slot-pois"></div>
       <div class="panel-slot"        data-panel="tracking"   id="slot-tracking"></div>
       <div class="panel-slot"        data-panel="zones"      id="slot-zones"></div>
@@ -102,6 +104,7 @@ export function createDashboard(container) {
 
   const slots = {
     nav:        el.querySelector('#slot-nav'),
+    map2d:      el.querySelector('#slot-2dmap'),
     pois:       el.querySelector('#slot-pois'),
     tracking:   el.querySelector('#slot-tracking'),
     zones:      el.querySelector('#slot-zones'),
@@ -222,6 +225,12 @@ function svgChart() {
 function svgBox() {
   return svgWrap(
     '<path d="M2.97 12.92A2 2 0 002 14.63v3.24a2 2 0 00.97 1.71l3 1.8a2 2 0 002.06 0L12 19v-5.5l-5-3-4.03 2.42z"/><path d="M7 16.5l-4.74-2.85"/><path d="M7 16.5l5-3"/><path d="M7 16.5v5.17"/><path d="M12 13.5V19l3.97 2.38a2 2 0 002.06 0l3-1.8A2 2 0 0022 17.87v-3.24a2 2 0 00-.97-1.71L17 10.5l-5 3z"/><path d="M17 16.5l-5-3"/><path d="M17 16.5l4.74-2.85"/><path d="M17 16.5v5.17"/><path d="M7.97 4.42A2 2 0 007 6.13v4.37l5 3 5-3V6.13a2 2 0 00-.97-1.71l-3-1.8a2 2 0 00-2.06 0l-3 1.8z"/><path d="M12 8L7.26 5.15"/><path d="M12 8l4.74-2.85"/><path d="M12 13.5V8"/>'
+  );
+}
+
+function svgMap2D() {
+  return svgWrap(
+    '<rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/>'
   );
 }
 

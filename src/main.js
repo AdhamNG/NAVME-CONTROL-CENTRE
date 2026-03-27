@@ -14,6 +14,7 @@ import { createPOIPanel } from './ui/poi-panel.js';
 import { createUserPanel } from './ui/user-panel.js';
 import { createAdminPanels } from './ui/admin-panel.js';
 import { createZonePanel } from './ui/zone-panel.js';
+import { create2DMapPanel } from './ui/map2d-panel.js';
 
 const app = document.getElementById('app');
 
@@ -26,6 +27,7 @@ const navPanel = createNavPanel(dashboard.slots.nav, flyTo);
 const poiPanel = createPOIPanel(dashboard.slots.pois);
 const userPanel = createUserPanel(dashboard.slots.tracking);
 const zonePanel = createZonePanel(dashboard.slots.zones);
+const map2dPanel = create2DMapPanel(dashboard.slots.map2d);
 
 createAdminPanels(
   {
@@ -60,6 +62,7 @@ async function onFormSubmit(creds) {
       poiPanel.show();
       userPanel.show();
       zonePanel.show();
+      map2dPanel.show();
       setTimeout(() => statusBar.hide(), 3000);
       return;
     }
@@ -76,6 +79,7 @@ async function onFormSubmit(creds) {
     poiPanel.show();
     userPanel.show();
     zonePanel.show();
+    map2dPanel.show();
 
     setTimeout(() => statusBar.hide(), 3000);
   } catch (err) {
