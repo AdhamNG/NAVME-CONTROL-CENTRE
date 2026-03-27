@@ -24,28 +24,23 @@ let panStart = { x: 0, y: 0 };
 const clipTop = new THREE.Plane(new THREE.Vector3(0, -1, 0), 0);   // cuts above
 const clipBottom = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);  // cuts below
 
-// ── Floor Detection ──────────────────────────────────────
-
 /**
- * Analyze mesh geometry to detect floors by clustering vertex Y positions.
+ * Analyze mesh geometry to detect floors using histogram-based peak detection.
+ * Instead of looking for gaps (which fails when walls bridge floors),
+ * we find Y-axis peaks where vertices concentrate (floor/ceiling surfaces).
  * @param {THREE.Object3D} meshRoot
- * @param {number} tolerance — min gap (meters) between floors
  * @returns {{ label:string, yMin:number, yMax:number, yCenter:number }[]}
  */
-export function analyzeFloors(meshRoot, tolerance = 0.8) {
+export function analyzeFloors(meshRoot) {
   const yValues = [];
 
   meshRoot.traverse((child) => {
     if (!child.isMesh || !child.geometry) return;
-
-    // Apply world matrix to get true Y positions
     child.updateWorldMatrix(true, false);
     const pos = child.geometry.attributes.position;
     if (!pos) return;
-
     const worldMatrix = child.matrixWorld;
     const v = new THREE.Vector3();
-
     for (let i = 0; i < pos.count; i++) {
       v.fromBufferAttribute(pos, i);
       v.applyMatrix4(worldMatrix);
@@ -55,38 +50,94 @@ export function analyzeFloors(meshRoot, tolerance = 0.8) {
 
   if (yValues.length === 0) return [{ label: 'Floor 1', yMin: -100, yMax: 100, yCenter: 0 }];
 
-  // Sort and cluster
-  yValues.sort((a, b) => a - b);
+  const yMin = Math.min(...yValues);
+  const yMax = Math.max(...yValues);
+  const totalRange = yMax - yMin;
 
-  const clusters = [];
-  let clusterStart = yValues[0];
-  let clusterEnd = yValues[0];
+  console.log(`[map2d] Y range: ${yMin.toFixed(2)} → ${yMax.toFixed(2)} (${totalRange.toFixed(2)}m), ${yValues.length} vertices`);
 
-  for (let i = 1; i < yValues.length; i++) {
-    if (yValues[i] - clusterEnd > tolerance) {
-      clusters.push({ yMin: clusterStart, yMax: clusterEnd });
-      clusterStart = yValues[i];
-    }
-    clusterEnd = yValues[i];
+  // If the mesh is very flat (less than ~2m tall), it's just 1 floor
+  if (totalRange < 2.0) {
+    return [{ label: 'Floor 1', yMin: yMin - 0.5, yMax: yMax + 0.5, yCenter: (yMin + yMax) / 2 }];
   }
-  clusters.push({ yMin: clusterStart, yMax: clusterEnd });
 
-  // Filter out tiny clusters (noise) — must span at least some height range or have significant vertex density
-  // For floor detection, we keep clusters that have a reasonable Y spread
-  const significantClusters = clusters.filter((c) => {
-    const height = c.yMax - c.yMin;
-    return height >= 0.05; // at least 5cm of geometry
-  });
+  // Build histogram with bin size relative to the total height
+  const binSize = Math.max(0.15, totalRange / 200); // ~200 bins
+  const numBins = Math.ceil(totalRange / binSize);
+  const histogram = new Array(numBins).fill(0);
 
-  const finalClusters = significantClusters.length > 0 ? significantClusters : clusters;
+  for (const y of yValues) {
+    const bin = Math.min(numBins - 1, Math.floor((y - yMin) / binSize));
+    histogram[bin]++;
+  }
 
-  // Label them
-  const result = finalClusters.map((c, i) => ({
-    label: `Floor ${i + 1}`,
-    yMin: c.yMin - 0.1, // small padding
-    yMax: c.yMax + 0.1,
-    yCenter: (c.yMin + c.yMax) / 2,
-  }));
+  // Smooth the histogram to reduce noise (moving average, window=5)
+  const smoothed = new Array(numBins).fill(0);
+  const halfWin = 2;
+  for (let i = 0; i < numBins; i++) {
+    let sum = 0, count = 0;
+    for (let j = Math.max(0, i - halfWin); j <= Math.min(numBins - 1, i + halfWin); j++) {
+      sum += histogram[j];
+      count++;
+    }
+    smoothed[i] = sum / count;
+  }
+
+  // Find the average density
+  const avgDensity = yValues.length / numBins;
+
+  // Find peaks: bins significantly above average (floor surfaces have dense geometry)
+  const peakThreshold = avgDensity * 2.0;
+  const peaks = [];
+  for (let i = 0; i < numBins; i++) {
+    if (smoothed[i] > peakThreshold) {
+      peaks.push({ bin: i, y: yMin + (i + 0.5) * binSize, density: smoothed[i] });
+    }
+  }
+
+  if (peaks.length === 0) {
+    return [{ label: 'Floor 1', yMin: yMin - 0.5, yMax: yMax + 0.5, yCenter: (yMin + yMax) / 2 }];
+  }
+
+  // Merge adjacent peak bins into floor ranges
+  // A floor is defined by a contiguous run of high-density bins
+  const floorRanges = [];
+  let rangeStart = peaks[0].y;
+  let rangeEnd = peaks[0].y;
+
+  for (let i = 1; i < peaks.length; i++) {
+    const gap = peaks[i].y - peaks[i - 1].y;
+    // If two peaks are close together (< typical floor height ~2.5m), they're the same floor
+    if (gap < 2.5) {
+      rangeEnd = peaks[i].y;
+    } else {
+      floorRanges.push({ yCenter: (rangeStart + rangeEnd) / 2, yMin: rangeStart, yMax: rangeEnd });
+      rangeStart = peaks[i].y;
+      rangeEnd = peaks[i].y;
+    }
+  }
+  floorRanges.push({ yCenter: (rangeStart + rangeEnd) / 2, yMin: rangeStart, yMax: rangeEnd });
+
+  // Expand each floor range to fill the space between floors
+  const result = [];
+  for (let i = 0; i < floorRanges.length; i++) {
+    const floor = floorRanges[i];
+    // Lower boundary: halfway to previous floor, or mesh bottom
+    const lowerBound = i > 0
+      ? (floorRanges[i - 1].yMax + floor.yMin) / 2
+      : yMin - 0.5;
+    // Upper boundary: halfway to next floor, or mesh top
+    const upperBound = i < floorRanges.length - 1
+      ? (floor.yMax + floorRanges[i + 1].yMin) / 2
+      : yMax + 0.5;
+
+    result.push({
+      label: `Floor ${i + 1}`,
+      yMin: lowerBound,
+      yMax: upperBound,
+      yCenter: floor.yCenter,
+    });
+  }
 
   console.log(`[map2d] Detected ${result.length} floor(s):`, result);
   return result;
@@ -116,8 +167,8 @@ export function init2DView(container) {
 
   // Orthographic camera looking straight down
   const aspect = w / h;
-  camera = new THREE.OrthographicCamera(-10 * aspect, 10 * aspect, 10, -10, 0.1, 500);
-  camera.position.set(0, 200, 0);
+  camera = new THREE.OrthographicCamera(-10 * aspect, 10 * aspect, 10, -10, 0.1, 2000);
+  camera.position.set(0, 500, 0);
   camera.lookAt(0, 0, 0);
   camera.up.set(0, 0, -1);
 
@@ -261,8 +312,9 @@ export function loadMeshFor2D(meshRoot) {
   baseFrustum.halfW = Math.max(size.x, size.z) * 0.6;
   baseFrustum.halfH = Math.max(size.x, size.z) * 0.6;
 
-  camera.position.set(center.x, 200, center.z);
-  camera.lookAt(center.x, 0, center.z);
+  const camY = center.y + Math.max(size.y, 50) + 100;
+  camera.position.set(center.x, camY, center.z);
+  camera.lookAt(center.x, center.y, center.z);
 
   // Show first floor
   panOffset = { x: 0, y: 0 };
