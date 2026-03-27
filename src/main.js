@@ -40,23 +40,20 @@ createAdminPanels(
   () => dashboard.refreshStats()
 );
 
-// Track if 2D view has been initialized
 let is2DInitialized = false;
 
-// Listen for 3D/2D tab switches
+// When switching to 2D tab, init the renderer and load the mesh
 dashboard.onViewSwitch((view) => {
   if (view === '2d') {
     if (!is2DInitialized) {
       init2DView(dashboard.viewport2d);
       is2DInitialized = true;
 
-      // Load mesh into 2D if 3D scene has a mesh loaded
       const scene3D = getScene();
       if (scene3D) {
         const anchor = scene3D.getObjectByName('MultiSetAnchor');
         if (anchor) {
-          const detectedFloors = loadMeshFor2D(anchor);
-          map2dPanel.setFloors(detectedFloors);
+          loadMeshFor2D(anchor);
           map2dPanel.bindZoomListener(dashboard.viewport2d);
         }
       }

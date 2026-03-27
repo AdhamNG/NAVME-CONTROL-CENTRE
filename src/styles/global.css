@@ -621,6 +621,59 @@ html, body {
   -webkit-backdrop-filter: none;
 }
 
+/* ── Floor Entries ── */
+.map2d-floor-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 8px 6px;
+  max-height: 340px;
+}
+
+.floor-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 10px;
+  margin-bottom: 4px;
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  transition: all 0.2s;
+}
+
+.floor-entry.active {
+  border-color: var(--cyan);
+  background: rgba(0, 240, 255, 0.05);
+  box-shadow: 0 0 8px rgba(0, 240, 255, 0.1);
+}
+
+.floor-entry.confirmed {
+  border-color: rgba(0, 255, 136, 0.2);
+  cursor: pointer;
+}
+
+.floor-entry.confirmed:hover {
+  border-color: rgba(0, 255, 136, 0.4);
+  background: rgba(0, 255, 136, 0.05);
+}
+
+.floor-entry-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.floor-entry-actions {
+  display: flex;
+  gap: 4px;
+  justify-content: flex-end;
+}
+
+.floor-name-input {
+  flex: 1;
+}
+
 /* ══════════════════════════════════════════════
    USER TRACKING PANEL
    ══════════════════════════════════════════════ */

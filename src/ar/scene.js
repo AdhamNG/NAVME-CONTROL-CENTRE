@@ -308,3 +308,97 @@ export function detachGizmo() {
   if (!transformControls) return;
   transformControls.detach();
 }
+
+// ── Floor Markers ──────────────────────────────────────
+
+const FLOOR_COLORS = [0x00f0ff, 0x8b5cf6, 0x00ff88, 0xffaa00, 0xff3366, 0x06b6d4];
+
+/**
+ * Create a floor marker grid at a given Y position.
+ * @param {number} y — initial Y position
+ * @param {number} colorIndex — index into color palette
+ * @returns {THREE.Group}
+ */
+export function addFloorMarker(y = 0, colorIndex = 0) {
+  if (!scene) return null;
+
+  const color = FLOOR_COLORS[colorIndex % FLOOR_COLORS.length];
+  const group = new THREE.Group();
+  group.name = 'FloorMarker';
+
+  // Grid plane (semi-transparent)
+  const gridSize = 60;
+  const gridDivs = 30;
+  const grid = new THREE.GridHelper(gridSize, gridDivs, color, color);
+  grid.material.opacity = 0.4;
+  grid.material.transparent = true;
+  grid.material.depthWrite = false;
+  group.add(grid);
+
+  // Solid plane behind the grid for visibility
+  const planeGeo = new THREE.PlaneGeometry(gridSize, gridSize);
+  const planeMat = new THREE.MeshBasicMaterial({
+    color: color,
+    transparent: true,
+    opacity: 0.08,
+    side: THREE.DoubleSide,
+    depthWrite: false,
+  });
+  const plane = new THREE.Mesh(planeGeo, planeMat);
+  plane.rotation.x = -Math.PI / 2;
+  group.add(plane);
+
+  group.position.set(0, y, 0);
+  scene.add(group);
+  return group;
+}
+
+/**
+ * Attach the gizmo to a floor marker, locked to Y-axis translate only.
+ * @param {THREE.Group} marker
+ */
+export function attachFloorGizmo(marker) {
+  if (!transformControls || !marker) return;
+  transformControls.setMode('translate');
+  transformControls.showX = false;
+  transformControls.showZ = false;
+  transformControls.showY = true;
+  transformControls.attach(marker);
+}
+
+/**
+ * Detach the gizmo and restore all axes.
+ */
+export function detachFloorGizmo() {
+  if (!transformControls) return;
+  transformControls.detach();
+  transformControls.showX = true;
+  transformControls.showZ = true;
+  transformControls.showY = true;
+}
+
+/**
+ * Remove a floor marker from the scene.
+ * @param {THREE.Group} marker
+ */
+export function removeFloorMarker(marker) {
+  if (!scene || !marker) return;
+  detachFloorGizmo();
+  scene.remove(marker);
+  marker.traverse((c) => {
+    if (c.geometry) c.geometry.dispose();
+    if (c.material) {
+      if (Array.isArray(c.material)) c.material.forEach(m => m.dispose());
+      else c.material.dispose();
+    }
+  });
+}
+
+/**
+ * Get the current Y position of a floor marker.
+ * @param {THREE.Group} marker
+ * @returns {number}
+ */
+export function getFloorMarkerY(marker) {
+  return marker ? marker.position.y : 0;
+}
