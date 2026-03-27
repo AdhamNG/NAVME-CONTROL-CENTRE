@@ -86,42 +86,52 @@ export function analyzeFloors(meshRoot) {
     smoothed[i] = sum / count;
   }
 
-  // ── Find the median density (robust baseline) ──
-  const sortedDensity = [...smoothed].sort((a, b) => a - b);
-  const medianDensity = sortedDensity[Math.floor(sortedDensity.length / 2)];
-
-  // ── Find valleys: local minima that dip well below median ──
-  // A valley must be below 40% of median, and must NOT be at the very edges
-  const valleyThreshold = medianDensity * 0.4;
-  const edgeMargin = Math.max(3, Math.floor(numBins * 0.05)); // ignore first/last 5%
-  const candidates = [];
+  // ── Find ALL local minima in the smoothed histogram ──
+  const edgeMargin = Math.max(5, Math.floor(numBins * 0.05));
+  const localMinima = [];
 
   for (let i = edgeMargin; i < numBins - edgeMargin; i++) {
-    if (smoothed[i] < valleyThreshold) {
-      // Check it's a local minimum in a ±3 bin window
-      let isMin = true;
-      for (let j = Math.max(0, i - 3); j <= Math.min(numBins - 1, i + 3); j++) {
-        if (smoothed[j] < smoothed[i]) { isMin = false; break; }
-      }
-      if (isMin) {
-        candidates.push({
-          bin: i,
-          y: yMin + (i + 0.5) * binSize,
-          density: smoothed[i],
-          // Score: how deep is this valley relative to its neighbors?
-          depth: medianDensity - smoothed[i],
-        });
-      }
+    // A local minimum: lower than all neighbors in ±3 bin window
+    let isMin = true;
+    for (let j = Math.max(0, i - 3); j <= Math.min(numBins - 1, i + 3); j++) {
+      if (j !== i && smoothed[j] < smoothed[i]) { isMin = false; break; }
+    }
+    if (!isMin) continue;
+
+    // Find the highest peak to the LEFT (scan up to 50 bins or edge)
+    let leftPeak = smoothed[i];
+    for (let j = i - 1; j >= Math.max(0, i - 50); j--) {
+      if (smoothed[j] > leftPeak) leftPeak = smoothed[j];
+    }
+
+    // Find the highest peak to the RIGHT
+    let rightPeak = smoothed[i];
+    for (let j = i + 1; j <= Math.min(numBins - 1, i + 50); j++) {
+      if (smoothed[j] > rightPeak) rightPeak = smoothed[j];
+    }
+
+    // Prominence: how much does this valley dip relative to the lower of its two surrounding peaks?
+    const neighborPeak = Math.min(leftPeak, rightPeak);
+    const prominence = neighborPeak > 0 ? (1 - smoothed[i] / neighborPeak) : 0;
+
+    // Only consider valleys that dip at least 30% below their neighboring peaks
+    if (prominence > 0.30) {
+      localMinima.push({
+        bin: i,
+        y: yMin + (i + 0.5) * binSize,
+        density: smoothed[i],
+        prominence,
+      });
     }
   }
 
-  // ── Sort candidates by depth (deepest valleys = most likely floor boundaries) ──
-  candidates.sort((a, b) => b.depth - a.depth);
+  // ── Sort candidates by prominence (deepest relative valleys first) ──
+  localMinima.sort((a, b) => b.prominence - a.prominence);
 
-  // ── Remove valleys too close to each other (keep the deepest) ──
-  const minFloorHeight = 1.5; // minimum 1.5m between floor splits
+  // ── Remove valleys too close to each other (keep the most prominent) ──
+  const minFloorHeight = 1.5;
   const splits = [];
-  for (const c of candidates) {
+  for (const c of localMinima) {
     const tooClose = splits.some(s => Math.abs(s.y - c.y) < minFloorHeight);
     if (!tooClose) {
       splits.push(c);
@@ -131,7 +141,8 @@ export function analyzeFloors(meshRoot) {
   // Sort splits by Y position
   splits.sort((a, b) => a.y - b.y);
 
-  console.log(`[map2d] Found ${splits.length} valley split(s):`, splits.map(s => `Y=${s.y.toFixed(2)} (depth=${s.depth.toFixed(0)})`));
+  console.log(`[map2d] Found ${splits.length} valley split(s):`,
+    splits.map(s => `Y=${s.y.toFixed(2)} (prominence=${(s.prominence * 100).toFixed(0)}%)`));
 
   // ── Build floor ranges from splits ──
   if (splits.length === 0) {
